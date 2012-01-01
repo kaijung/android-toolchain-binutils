@@ -2170,7 +2170,7 @@ class Target_arm : public Sized_target<32, big_endian>
     Reloc_section;
 
   // When were are relocating a stub, we pass this as the relocation number.
-  static const size_t fake_relnum_for_stubs = static_cast<size_t>(-1);
+  static const size_t fake_relnum_for_stubs;
 
   Target_arm()
     : Sized_target<32, big_endian>(&arm_info),
@@ -2954,6 +2954,9 @@ class Target_arm : public Sized_target<32, big_endian>
   // Map addresses to relocs for Cortex-A8 erratum.
   Cortex_a8_relocs_info cortex_a8_relocs_info_;
 };
+
+template<bool big_endian>
+const size_t Target_arm<big_endian>::fake_relnum_for_stubs = static_cast<size_t>(-1);
 
 template<bool big_endian>
 const Target::Target_info Target_arm<big_endian>::arm_info =
