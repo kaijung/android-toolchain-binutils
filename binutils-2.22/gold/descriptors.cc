@@ -45,13 +45,15 @@
 #endif
 
 static inline void
+// Mingw does not define F_SETFD.
+#ifndef F_SETFD
+set_close_on_exec(int ) {}
+#else
 set_close_on_exec(int fd)
 {
-// Mingw does not define F_SETFD.
-#ifdef F_SETFD
   fcntl(fd, F_SETFD, FD_CLOEXEC);
-#endif
 }
+#endif
 
 namespace gold
 {

@@ -2628,6 +2628,8 @@ class Output_fill
     : is_big_endian_(parameters->target().is_big_endian())
   { }
 
+  virtual ~Output_fill() {}
+
   // Return the smallest size chunk of free space that can be
   // filled with a dummy compilation unit.
   size_t
@@ -2664,6 +2666,8 @@ class Output_fill_debug_info : public Output_fill
     : is_debug_types_(is_debug_types)
   { }
 
+  virtual ~Output_fill_debug_info() {}
+
  protected:
   virtual size_t
   do_minimum_hole_size() const;
@@ -2686,6 +2690,8 @@ class Output_fill_debug_line : public Output_fill
  public:
   Output_fill_debug_line()
   { }
+
+  virtual ~Output_fill_debug_line() {}
 
  protected:
   virtual size_t

@@ -773,7 +773,7 @@ Sized_dwarf_line_info<size, big_endian>::format_file_lineno(
 
   gold_assert(loc.header_num < static_cast<int>(this->files_.size()));
   gold_assert(loc.file_num
-	      < static_cast<int>(this->files_[loc.header_num].size()));
+	      < static_cast<unsigned int>(this->files_[loc.header_num].size()));
   const std::pair<int, std::string>& filename_pair
       = this->files_[loc.header_num][loc.file_num];
   const std::string& filename = filename_pair.second;
