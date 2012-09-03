@@ -1045,8 +1045,7 @@ Target_sparc<size, big_endian>::got_section(Symbol_table* symtab,
 
       this->got_ = new Output_data_got<size, big_endian>();
 
-      Output_section* os;
-      os = layout->add_output_section_data(".got", elfcpp::SHT_PROGBITS,
+      layout->add_output_section_data(".got", elfcpp::SHT_PROGBITS,
 					   (elfcpp::SHF_ALLOC
 					    | elfcpp::SHF_WRITE),
 					   this->got_, false, true, false,
@@ -2474,7 +2473,7 @@ Target_sparc<size, big_endian>::Relocate::relocate(
   // Get the GOT offset if needed.  Unlike i386 and x86_64, our GOT
   // pointer points to the beginning, not the end, of the table.
   // So we just use the plain offset.
-  bool have_got_offset = false;
+  //bool have_got_offset = false;
   unsigned int got_offset = 0;
   switch (r_type)
     {
@@ -2495,7 +2494,7 @@ Target_sparc<size, big_endian>::Relocate::relocate(
           gold_assert(object->local_has_got_offset(r_sym, GOT_TYPE_STANDARD));
           got_offset = object->local_got_offset(r_sym, GOT_TYPE_STANDARD);
         }
-      have_got_offset = true;
+      //have_got_offset = true;
       break;
 
     default:

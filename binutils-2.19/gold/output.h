@@ -2430,7 +2430,7 @@ class Output_section_lookup_maps
 		    Output_merge_base* pomb)
   {
     std::pair<Merge_section_properties, Output_merge_base*> value(msp, pomb);
-    std::pair<Merge_sections_by_properties::iterator, bool> result =
+    //std::pair<Merge_sections_by_properties::iterator, bool> result =
       this->merge_sections_by_properties_.insert(value);
     gold_assert(value.second);
   }
@@ -2443,7 +2443,7 @@ class Output_section_lookup_maps
   {
     Const_section_id csid(object, shndx);
     std::pair<Const_section_id, Output_merge_base*> value(csid, pomb);
-    std::pair<Merge_sections_by_id::iterator, bool> result =
+    //std::pair<Merge_sections_by_id::iterator, bool> result =
       this->merge_sections_by_id_.insert(value);
     gold_assert(value.second);
   }
@@ -2467,7 +2467,7 @@ class Output_section_lookup_maps
     Const_section_id csid(relobj, shndx);
     std::pair<Const_section_id, Output_relaxed_input_section*>
       value(csid, poris);
-    std::pair<Relaxed_input_sections_by_id::iterator, bool> result =
+    //std::pair<Relaxed_input_sections_by_id::iterator, bool> result =
       this->relaxed_input_sections_by_id_.insert(value);
     gold_assert(value.second);
   }

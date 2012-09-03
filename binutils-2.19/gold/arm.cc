@@ -4144,8 +4144,7 @@ Target_arm<big_endian>::got_section(Symbol_table* symtab, Layout* layout)
 
       this->got_ = new Arm_output_data_got<big_endian>(symtab, layout);
 
-      Output_section* os;
-      os = layout->add_output_section_data(".got", elfcpp::SHT_PROGBITS,
+      layout->add_output_section_data(".got", elfcpp::SHT_PROGBITS,
 					   (elfcpp::SHF_ALLOC
 					    | elfcpp::SHF_WRITE),
 					   this->got_, false, false, false,
@@ -4155,7 +4154,7 @@ Target_arm<big_endian>::got_section(Symbol_table* symtab, Layout* layout)
       // always create a PLT if we create a GOT, although the PLT
       // might be empty.
       this->got_plt_ = new Output_data_space(4, "** GOT PLT");
-      os = layout->add_output_section_data(".got", elfcpp::SHT_PROGBITS,
+      layout->add_output_section_data(".got", elfcpp::SHT_PROGBITS,
 					   (elfcpp::SHF_ALLOC
 					    | elfcpp::SHF_WRITE),
 					   this->got_plt_, false, false,
