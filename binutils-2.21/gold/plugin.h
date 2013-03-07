@@ -1,6 +1,6 @@
 // plugin.h -- plugin manager for gold      -*- C++ -*-
 
-// Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright 2008, 2009, 2010, 2013 Free Software Foundation, Inc.
 // Written by Cary Coutant <ccoutant@google.com>.
 
 // This file is part of gold.
@@ -124,7 +124,7 @@ class Plugin_manager
  public:
   Plugin_manager(const General_options& options)
     : plugins_(), objects_(), deferred_layout_objects_(), input_file_(NULL),
-      plugin_input_file_(), in_replacement_phase_(false),
+      plugin_input_file_(), in_replacement_phase_(false), any_added_(false),
       in_claim_file_handler_(false),
       options_(options), workqueue_(NULL), task_(NULL), input_objects_(NULL),
       symtab_(NULL), layout_(NULL), dirpath_(NULL), mapfile_(NULL),
@@ -293,6 +293,9 @@ class Plugin_manager
   // placeholder symbols from the Pluginobj objects.
   bool in_replacement_phase_;
 
+  // Whether any input files or libraries were added by a plugin.
+  bool any_added_;
+
   // Set to true when the claim_file handler of a plugin is called.
   bool in_claim_file_handler_;
 
@@ -364,7 +367,7 @@ class Pluginobj : public Object
 
   // The number of symbols provided by the plugin.
   int nsyms_;
-  
+
   // The symbols provided by the plugin.
   const struct ld_plugin_symbol* syms_;
 

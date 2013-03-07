@@ -1,6 +1,6 @@
 // plugin.cc -- plugin manager for gold      -*- C++ -*-
 
-// Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright 2008, 2009, 2010, 2013 Free Software Foundation, Inc.
 // Written by Cary Coutant <ccoutant@google.com>.
 
 // This file is part of gold.
@@ -71,6 +71,7 @@ dlerror(void)
 #include "target.h"
 #include "readsyms.h"
 #include "symtab.h"
+#include "descriptors.h"
 #include "elfcpp.h"
 
 namespace gold
@@ -467,6 +468,14 @@ Plugin_manager::layout_deferred_objects()
 void
 Plugin_manager::cleanup()
 {
+  if (this->any_added_)
+    {
+      // If any input files were added, close all the input files.
+      // This is because the plugin may want to remove them, and on
+      // Windows you are not allowed to remove an open file.
+      close_all_descriptors();
+    }
+
   for (this->current_ = this->plugins_.begin();
        this->current_ != this->plugins_.end();
        ++this->current_)
@@ -624,6 +633,7 @@ Plugin_manager::add_input_file(const char* pathname, bool is_lib)
                                                 this->this_blocker_,
                                                 next_blocker));
   this->this_blocker_ = next_blocker;
+  this->any_added_ = true;
   return LDPS_OK;
 }
 
@@ -1333,7 +1343,7 @@ get_input_section_type(const struct ld_plugin_section section,
     return LDPS_ERR;
 
   Object* obj
-    = parameters->options().plugins()->get_elf_object(section.handle); 
+    = parameters->options().plugins()->get_elf_object(section.handle);
 
   if (obj == NULL)
     return LDPS_BAD_HANDLE;
@@ -1356,7 +1366,7 @@ get_input_section_name(const struct ld_plugin_section section,
     return LDPS_ERR;
 
   Object* obj
-    = parameters->options().plugins()->get_elf_object(section.handle); 
+    = parameters->options().plugins()->get_elf_object(section.handle);
 
   if (obj == NULL)
     return LDPS_BAD_HANDLE;
@@ -1387,7 +1397,7 @@ get_input_section_contents(const struct ld_plugin_section section,
     return LDPS_ERR;
 
   Object* obj
-    = parameters->options().plugins()->get_elf_object(section.handle); 
+    = parameters->options().plugins()->get_elf_object(section.handle);
 
   if (obj == NULL)
     return LDPS_BAD_HANDLE;
