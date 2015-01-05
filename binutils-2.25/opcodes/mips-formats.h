@@ -1,5 +1,5 @@
 /* mips-formats.h
-   Copyright 2013 Free Software Foundation, Inc.
+   Copyright (C) 2013-2014 Free Software Foundation, Inc.
 
    This library is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -49,6 +49,16 @@
       static_assert[(1 << (SIZE)) == ARRAY_SIZE (MAP)]; \
     static const struct mips_mapped_int_operand op = { \
       { OP_MAPPED_INT, SIZE, LSB }, MAP, PRINT_HEX \
+    }; \
+    return &op.root; \
+  }
+
+#define MAPPED_STRING(SIZE, LSB, MAP, ALLOW_CONSTANTS) \
+  { \
+    typedef char ATTRIBUTE_UNUSED \
+      static_assert[(1 << (SIZE)) == ARRAY_SIZE (MAP)]; \
+    static const struct mips_mapped_string_operand op = { \
+      { OP_MAPPED_STRING, SIZE, LSB }, MAP, ALLOW_CONSTANTS \
     }; \
     return &op.root; \
   }
@@ -133,4 +143,12 @@
   { \
     static const struct mips_operand op = { OP_##TYPE, SIZE, LSB }; \
     return &op; \
+  }
+
+#define PREV_CHECK(SIZE, LSB, GT_OK, LT_OK, EQ_OK, ZERO_OK) \
+  { \
+    static const struct mips_check_prev_operand op = { \
+      { OP_CHECK_PREV, SIZE, LSB }, GT_OK, LT_OK, EQ_OK, ZERO_OK \
+    }; \
+    return &op.root; \
   }
