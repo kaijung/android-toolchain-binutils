@@ -3527,6 +3527,7 @@ u16_mbtouc (wchar_t * puc, const unsigned short * s, unsigned int n)
  * CrystaX: Special case for OS X. To be able build it with sysroot from 10.6,
  * we define own wcsncasecmp function, which is missing from 10.6 libc.
  */
+#define wcsncasecmp __crystax_binutils_wcsncasecmp
 static int
 wcsncasecmp(const wchar_t *s1, const wchar_t *s2, size_t n)
 {
