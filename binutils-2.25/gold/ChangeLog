@@ -1,3 +1,13 @@
+2016-02-05  Sriraman Tallam  <tmsriram@google.com>
+
+        * icf.cc (get_rel_addend): New function.
+        (get_section_contents):  Move merge section addend computation to a
+        new function.  Ignore negative values for SHT_REL and SHT_RELA addends.
+        Fix bug to not read past the length of the section.
+
+    Fix bug related to addend computation for MERGE sections.
+
+
 2016-02-26  Egor Kochetov  <egor.kochetov@intel.com>
 	    Cary Coutant  <ccoutant@gmail.com>
 
