@@ -1,6 +1,6 @@
 // arm.cc -- arm target support for gold.
 
-// Copyright (C) 2009-2015 Free Software Foundation, Inc.
+// Copyright (C) 2009-2014 Free Software Foundation, Inc.
 // Written by Doug Kwan <dougkwan@google.com> based on the i386 code
 // by Ian Lance Taylor <iant@google.com>.
 // This file also contains borrowed and adapted code from
@@ -62,7 +62,10 @@ template<bool big_endian>
 class Output_data_plt_arm;
 
 template<bool big_endian>
-class Output_data_plt_arm_standard;
+class Output_data_plt_arm_short;
+
+template<bool big_endian>
+class Output_data_plt_arm_long;
 
 template<bool big_endian>
 class Stub_table;
@@ -874,7 +877,7 @@ class Stub_table : public Output_data
   Stub_table(Arm_input_section<big_endian>* owner)
     : Output_data(), owner_(owner), reloc_stubs_(), reloc_stubs_size_(0),
       reloc_stubs_addralign_(1), cortex_a8_stubs_(), arm_v4bx_stubs_(0xf),
-      prev_data_size_(0), prev_addralign_(1)
+      prev_data_size_(0), prev_addralign_(1), padding_(0)
   { }
 
   ~Stub_table()
@@ -994,14 +997,16 @@ class Stub_table : public Output_data
   // Reset address and file offset.
   void
   do_reset_address_and_file_offset()
-  { this->set_current_data_size_for_child(this->prev_data_size_); }
+  {
+    this->set_current_data_size_for_child(
+      this->prev_data_size_ + this->padding_);
+  }
 
   // Set final data size.
   void
   set_final_data_size()
   { this->set_data_size(this->current_data_size()); }
 
- private:
   // Relocate one stub.
   void
   relocate_stub(Stub*, const Relocate_info<32, big_endian>*,
@@ -1036,6 +1041,7 @@ class Stub_table : public Output_data
   off_t prev_data_size_;
   // address alignment of this in the previous pass.
   uint64_t prev_addralign_;
+  off_t padding_;
 };
 
 // Arm_exidx_cantunwind class.  This represents an EXIDX_CANTUNWIND entry
@@ -2555,7 +2561,11 @@ class Target_arm : public Sized_target<32, big_endian>
 		   Output_data_space* got_irelative)
   {
     gold_assert(got_plt != NULL && got_irelative != NULL);
-    return new Output_data_plt_arm_standard<big_endian>(
+    if (parameters->options().long_plt())
+      return new Output_data_plt_arm_long<big_endian>(
+	layout, got, got_plt, got_irelative);
+    else
+      return new Output_data_plt_arm_short<big_endian>(
 	layout, got, got_plt, got_irelative);
   }
 
@@ -4542,7 +4552,7 @@ Reloc_stub::stub_type_for_reloc(
   // This is a bit ugly but we want to avoid using a templated class for
   // big and little endianities.
   bool may_use_blx;
-  bool should_force_pic_veneer;
+  bool should_force_pic_veneer = parameters->options().pic_veneer();
   bool thumb2;
   bool thumb_only;
   if (parameters->target().is_big_endian())
@@ -4550,7 +4560,7 @@ Reloc_stub::stub_type_for_reloc(
       const Target_arm<true>* big_endian_target =
 	Target_arm<true>::default_target();
       may_use_blx = big_endian_target->may_use_v5t_interworking();
-      should_force_pic_veneer = big_endian_target->should_force_pic_veneer();
+      should_force_pic_veneer |= big_endian_target->should_force_pic_veneer();
       thumb2 = big_endian_target->using_thumb2();
       thumb_only = big_endian_target->using_thumb_only();
     }
@@ -4559,7 +4569,8 @@ Reloc_stub::stub_type_for_reloc(
       const Target_arm<false>* little_endian_target =
 	Target_arm<false>::default_target();
       may_use_blx = little_endian_target->may_use_v5t_interworking();
-      should_force_pic_veneer = little_endian_target->should_force_pic_veneer();
+      should_force_pic_veneer |=
+	little_endian_target->should_force_pic_veneer();
       thumb2 = little_endian_target->using_thumb2();
       thumb_only = little_endian_target->using_thumb_only();
     }
@@ -5070,6 +5081,15 @@ Stub_table<big_endian>::do_write(Output_file* of)
 		  big_endian);
     }
 
+  if (parameters->options().stub_group_auto_padding())
+    {
+      // Zero-fill padding area.
+      gold_assert((unsigned int)(this->prev_data_size_ + this->padding_) <= oview_size);
+      unsigned char* p_padding_area = oview + this->prev_data_size_;
+      for (unsigned int i = 0; i < this->padding_; ++i)
+	*(p_padding_area + i) = 0;
+    }
+
   of->write_output_view(this->offset(), oview_size, oview);
 }
 
@@ -5108,10 +5128,59 @@ Stub_table<big_endian>::update_data_size_and_addralign()
 	      + stub_template->size());
     }
 
+  unsigned int prev_padding = this->padding_;
+
+  // Smart padding.
+  if (parameters->options().stub_group_auto_padding())
+    {
+      if(size > this->prev_data_size_)
+	{
+	  // Stub table has to grow 'delta' bytes.
+	  unsigned int delta = size - this->prev_data_size_;
+	  // Test to see if this delta grow could be "absorbed" by the
+	  // "padding_" we added in previously iteration.
+	  if (delta <= this->padding_)
+	    {
+	      // Yes! Grow into padding area, shrink padding, keep stub table
+	      // size unchanged.
+	      this->padding_ -= delta;
+	    }
+	  else
+	    {
+	      // No! Delta is too much to fit in padding area. Heuristically, we
+	      // increase padding. Padding is about 0.5% of huge increment, or
+	      // 2% of moderate increment, or 0% for smaller ones..
+	      if (delta >= 0x50000)
+		this->padding_ = 0x250;
+	      else if (delta >= 0x30000)
+		this->padding_ = 0x150;
+	      else if (delta >= 0x10000)
+		this->padding_ = 0x100;
+	      else if (delta >= 0x500)
+		{
+		  // Set padding to 2% of stub table growth delta or 0x40,
+		  // whichever is smaller.
+		  this->padding_ = std::min((unsigned int)(delta * 0.02),
+					    (unsigned int)0x40);
+		}
+	    }
+	}
+      else if (size < this->prev_data_size_)
+	{
+	  // Stub table shrinks, this is rare, but not impossible.
+	  unsigned int delta = this->prev_data_size_ - size;
+	  // So let padding increase to absorb the shrinking. Still we get an
+	  // unchanged stub table.
+	  this->padding_ += delta;
+	}
+    }
+
   // Check if either data size or alignment changed in this pass.
   // Update prev_data_size_ and prev_addralign_.  These will be used
   // as the current data size and address alignment for the next pass.
-  bool changed = size != this->prev_data_size_;
+  bool changed = (size + this->padding_) !=
+    this->prev_data_size_ + prev_padding;
+
   this->prev_data_size_ = size;
 
   if (addralign != this->prev_addralign_)
@@ -5851,7 +5920,7 @@ Arm_output_section<big_endian>::group_sections(
 			      (state == FINDING_STUB_SECTION
 			       ? group_end
 			       : stub_table),
-			       target, &new_relaxed_sections, task);
+			      target, &new_relaxed_sections, task);
     }
 
   // Convert input section into relaxed input section in a batch.
@@ -6255,16 +6324,9 @@ Arm_relobj<big_endian>::scan_section_for_cortex_a8_erratum(
     this->mapping_symbols_info_.lower_bound(section_start);
 
   // There are no mapping symbols for this section.  Treat it as a data-only
-  // section.  Issue a warning if section is marked as containing
-  // instructions.
+  // section.
   if (p == this->mapping_symbols_info_.end() || p->first.first != shndx)
-    {
-      if ((this->section_flags(shndx) & elfcpp::SHF_EXECINSTR) != 0)
-	gold_warning(_("cannot scan executable section %u of %s for Cortex-A8 "
-		       "erratum because it has no mapping symbols."),
-		     shndx, this->name().c_str());
-      return;
-    }
+    return;
 
   Arm_address output_address =
     this->simple_input_section_output_address(shndx, os);
@@ -7722,29 +7784,14 @@ class Output_data_plt_arm_standard : public Output_data_plt_arm<big_endian>
   do_first_plt_entry_offset() const
   { return sizeof(first_plt_entry); }
 
-  // Return the size of a PLT entry.
-  virtual unsigned int
-  do_get_plt_entry_size() const
-  { return sizeof(plt_entry); }
-
   virtual void
   do_fill_first_plt_entry(unsigned char* pov,
 			  Arm_address got_address,
 			  Arm_address plt_address);
 
-  virtual void
-  do_fill_plt_entry(unsigned char* pov,
-		    Arm_address got_address,
-		    Arm_address plt_address,
-		    unsigned int got_offset,
-		    unsigned int plt_offset);
-
  private:
   // Template for the first PLT entry.
   static const uint32_t first_plt_entry[5];
-
-  // Template for subsequent PLT entries.
-  static const uint32_t plt_entry[3];
 };
 
 // ARM PLTs.
@@ -7772,7 +7819,7 @@ Output_data_plt_arm_standard<big_endian>::do_fill_first_plt_entry(
 {
   // Write first PLT entry.  All but the last word are constants.
   const size_t num_first_plt_words = (sizeof(first_plt_entry)
-				      / sizeof(plt_entry[0]));
+				      / sizeof(first_plt_entry[0]));
   for (size_t i = 0; i < num_first_plt_words - 1; i++)
     elfcpp::Swap<32, big_endian>::writeval(pov + i * 4, first_plt_entry[i]);
   // Last word in first PLT entry is &GOT[0] - .
@@ -7781,9 +7828,39 @@ Output_data_plt_arm_standard<big_endian>::do_fill_first_plt_entry(
 }
 
 // Subsequent entries in the PLT.
+// This class generates short (12-byte) entries, for displacements up to 2^28.
 
 template<bool big_endian>
-const uint32_t Output_data_plt_arm_standard<big_endian>::plt_entry[3] =
+class Output_data_plt_arm_short : public Output_data_plt_arm_standard<big_endian>
+{
+ public:
+  Output_data_plt_arm_short(Layout* layout,
+			    Arm_output_data_got<big_endian>* got,
+			    Output_data_space* got_plt,
+			    Output_data_space* got_irelative)
+    : Output_data_plt_arm_standard<big_endian>(layout, got, got_plt, got_irelative)
+  { }
+
+ protected:
+  // Return the size of a PLT entry.
+  virtual unsigned int
+  do_get_plt_entry_size() const
+  { return sizeof(plt_entry); }
+
+  virtual void
+  do_fill_plt_entry(unsigned char* pov,
+		    Arm_address got_address,
+		    Arm_address plt_address,
+		    unsigned int got_offset,
+		    unsigned int plt_offset);
+
+ private:
+  // Template for subsequent PLT entries.
+  static const uint32_t plt_entry[3];
+};
+
+template<bool big_endian>
+const uint32_t Output_data_plt_arm_short<big_endian>::plt_entry[3] =
 {
   0xe28fc600,	// add   ip, pc, #0xNN00000
   0xe28cca00,	// add   ip, ip, #0xNN000
@@ -7792,7 +7869,69 @@ const uint32_t Output_data_plt_arm_standard<big_endian>::plt_entry[3] =
 
 template<bool big_endian>
 void
-Output_data_plt_arm_standard<big_endian>::do_fill_plt_entry(
+Output_data_plt_arm_short<big_endian>::do_fill_plt_entry(
+    unsigned char* pov,
+    Arm_address got_address,
+    Arm_address plt_address,
+    unsigned int got_offset,
+    unsigned int plt_offset)
+{
+  int32_t offset = ((got_address + got_offset)
+		    - (plt_address + plt_offset + 8));
+  if (offset < 0 || offset > 0x0fffffff)
+    gold_error(_("PLT offset too large, try linking with --long-plt"));
+
+  uint32_t plt_insn0 = plt_entry[0] | ((offset >> 20) & 0xff);
+  elfcpp::Swap<32, big_endian>::writeval(pov, plt_insn0);
+  uint32_t plt_insn1 = plt_entry[1] | ((offset >> 12) & 0xff);
+  elfcpp::Swap<32, big_endian>::writeval(pov + 4, plt_insn1);
+  uint32_t plt_insn2 = plt_entry[2] | (offset & 0xfff);
+  elfcpp::Swap<32, big_endian>::writeval(pov + 8, plt_insn2);
+}
+
+// This class generates long (16-byte) entries, for arbitrary displacements.
+
+template<bool big_endian>
+class Output_data_plt_arm_long : public Output_data_plt_arm_standard<big_endian>
+{
+ public:
+  Output_data_plt_arm_long(Layout* layout,
+			   Arm_output_data_got<big_endian>* got,
+			   Output_data_space* got_plt,
+			   Output_data_space* got_irelative)
+    : Output_data_plt_arm_standard<big_endian>(layout, got, got_plt, got_irelative)
+  { }
+
+ protected:
+  // Return the size of a PLT entry.
+  virtual unsigned int
+  do_get_plt_entry_size() const
+  { return sizeof(plt_entry); }
+
+  virtual void
+  do_fill_plt_entry(unsigned char* pov,
+		    Arm_address got_address,
+		    Arm_address plt_address,
+		    unsigned int got_offset,
+		    unsigned int plt_offset);
+
+ private:
+  // Template for subsequent PLT entries.
+  static const uint32_t plt_entry[4];
+};
+
+template<bool big_endian>
+const uint32_t Output_data_plt_arm_long<big_endian>::plt_entry[4] =
+{
+  0xe28fc200,	// add   ip, pc, #0xN0000000
+  0xe28cc600,	// add   ip, ip, #0xNN00000
+  0xe28cca00,	// add   ip, ip, #0xNN000
+  0xe5bcf000,	// ldr   pc, [ip, #0xNNN]!
+};
+
+template<bool big_endian>
+void
+Output_data_plt_arm_long<big_endian>::do_fill_plt_entry(
     unsigned char* pov,
     Arm_address got_address,
     Arm_address plt_address,
@@ -7802,13 +7941,14 @@ Output_data_plt_arm_standard<big_endian>::do_fill_plt_entry(
   int32_t offset = ((got_address + got_offset)
 		    - (plt_address + plt_offset + 8));
 
-  gold_assert(offset >= 0 && offset < 0x0fffffff);
-  uint32_t plt_insn0 = plt_entry[0] | ((offset >> 20) & 0xff);
+  uint32_t plt_insn0 = plt_entry[0] | (offset >> 28);
   elfcpp::Swap<32, big_endian>::writeval(pov, plt_insn0);
-  uint32_t plt_insn1 = plt_entry[1] | ((offset >> 12) & 0xff);
+  uint32_t plt_insn1 = plt_entry[1] | ((offset >> 20) & 0xff);
   elfcpp::Swap<32, big_endian>::writeval(pov + 4, plt_insn1);
-  uint32_t plt_insn2 = plt_entry[2] | (offset & 0xfff);
+  uint32_t plt_insn2 = plt_entry[2] | ((offset >> 12) & 0xff);
   elfcpp::Swap<32, big_endian>::writeval(pov + 8, plt_insn2);
+  uint32_t plt_insn3 = plt_entry[3] | (offset & 0xfff);
+  elfcpp::Swap<32, big_endian>::writeval(pov + 12, plt_insn3);
 }
 
 // Write out the PLT.  This uses the hand-coded instructions above,
@@ -10563,6 +10703,7 @@ Target_arm<big_endian>::do_adjust_elf_header(
   }
   elfcpp::Ehdr_write<32, big_endian> oehdr(view);
   oehdr.put_e_ident(e_ident);
+  oehdr.put_e_flags(this->processor_specific_flags());
 }
 
 // do_make_elf_object to override the same function in the base class.
@@ -10759,6 +10900,24 @@ Target_arm<big_endian>::tag_cpu_arch_combine(
       T(V7E_M),	// V6S_M.
       T(V7E_M)	// V7E_M.
     };
+  static const int v8[] =
+    {
+      T(V8),   // PRE_V4.
+      T(V8),   // V4.
+      T(V8),   // V4T.
+      T(V8),   // V5T.
+      T(V8),   // V5TE.
+      T(V8),   // V5TEJ.
+      T(V8),   // V6.
+      T(V8),   // V6KZ.
+      T(V8),   // V6T2.
+      T(V8),   // V6K.
+      T(V8),   // V7.
+      T(V8),   // V6_M.
+      T(V8),   // V6S_M.
+      T(V8),   // V7E_M.
+      T(V8)    // V8.
+    };
   static const int v4t_plus_v6_m[] =
     {
       -1,		// PRE_V4.
@@ -10775,6 +10934,7 @@ Target_arm<big_endian>::tag_cpu_arch_combine(
       T(V6_M),		// V6_M.
       T(V6S_M),		// V6S_M.
       T(V7E_M),		// V7E_M.
+      T(V8),		// V8.
       T(V4T_PLUS_V6_M)	// V4T plus V6_M.
     };
   static const int* comb[] =
@@ -10785,6 +10945,7 @@ Target_arm<big_endian>::tag_cpu_arch_combine(
       v6_m,
       v6s_m,
       v7e_m,
+      v8,
       // Pseudo-architecture.
       v4t_plus_v6_m
     };
@@ -10882,7 +11043,8 @@ Target_arm<big_endian>::tag_cpu_name_value(unsigned int value)
    "ARM v7",
    "ARM v6-M",
    "ARM v6S-M",
-   "ARM v7E-M"
+   "ARM v7E-M",
+   "ARM v8"
  };
  const size_t name_table_size = sizeof(name_table) / sizeof(name_table[0]);
 
@@ -12163,7 +12325,9 @@ Target_arm<big_endian>::do_relax(
   bool any_stub_table_changed = false;
   Unordered_set<const Output_section*> sections_needing_adjustment;
   for (Stub_table_iterator sp = this->stub_tables_.begin();
-       (sp != this->stub_tables_.end()) && !any_stub_table_changed;
+       (sp != this->stub_tables_.end()
+	&& (parameters->options().stub_group_auto_padding()
+	    || !any_stub_table_changed));
        ++sp)
     {
       if ((*sp)->update_data_size_and_addralign())
