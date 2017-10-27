@@ -1,6 +1,6 @@
 // dwarf_reader.cc -- parse dwarf2/3 debug information
 
-// Copyright (C) 2007-2014 Free Software Foundation, Inc.
+// Copyright (C) 2007-2014, 2017 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -1961,7 +1961,7 @@ Sized_dwarf_line_info<size, big_endian>::read_header_tables_v5(
 	}
       gold_debug(DEBUG_LOCATION, "File %3d: %s",
 		 static_cast<int>(file_list.size()), path);
-      file_list.push_back(std::make_pair<int, std::string>(dirindex, path));
+      file_list.push_back(std::make_pair<int, std::string>(int(dirindex), path));
     }
 
   delete[] types;
